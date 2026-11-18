@@ -53,6 +53,9 @@ input[type=search]:focus,select:focus{background:#fff}
 .lbl.col{cursor:pointer;pointer-events:auto}
 .lbl.st span{display:inline-block;white-space:nowrap;font:500 10.5px/1 var(--body);color:#4b4f55;text-shadow:0 0 2px #fff,0 0 2px #fff,0 0 3px #fff;letter-spacing:.1px}
 .lbl.st.mj span{font:700 11px/1 var(--body);color:#2c3036}
+.hico{background:none;border:0}
+.hico svg{filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))}
+.lbl.casa{font:700 11px/1.1 var(--body);color:#6b2a10}
 .lbl.esc{font:600 10.5px/1.1 var(--body);color:#0F5F60}
 .lbl.col span{display:inline-block;transform:translate(-50%,-50%);padding:1px 3px;border-radius:4px}
 .lbl.col span:hover{background:rgba(255,255,255,.9);text-decoration:underline}
@@ -194,7 +197,7 @@ input[type=range]{width:100%;accent-color:var(--guinda)}
     <div id="scroll">
       <div class="sec">
         <div class="field" id="searchWrap">
-          <label for="q">Buscar colonia, CP, escuela, unidad de salud, localidad, AGEB o municipio</label>
+          <label for="q">Buscar colonia, CP, escuela, casa comunitaria, unidad de salud, localidad, AGEB o municipio</label>
           <input id="q" type="search" placeholder="Buscar colonia, CP, escuela, AGEB…" autocomplete="off">
           <div id="results" role="listbox"></div>
         </div>
@@ -272,6 +275,10 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
 const S={mun:"",inst:"",onU:new Set(INST.map(i=>i.id)),onR:new Set(INST.map(i=>i.id).filter(i=>i!=="IMSS ORDINARIO")),op:.6,labels:true,reas:false,munl:true,col:true,calles:true,pobl:true,plev:"col",isel:new Set(INST.map(i=>i.id)),base:"none",sel:null};
+let HS=[],HR={},hLayer=L.layerGroup();
+const HC=[{id:"cap",lab:"Casas de la comunidad (ciudad de Durango)",c:"#7A1430"},{id:"inpi",lab:"Casas y comedores de la niñez indígena (INPI)",c:"#9C4A1A"}];
+const HM=Object.fromEntries(HC.map(x=>[x.id,x]));const onH=new Set(HC.map(x=>x.id));
+const houseIcon=(c,warn)=>L.divIcon({className:"hico",html:`<svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6 2.2 11h2.6v9.4h5.6v-5.6h3.2v5.6h5.6V11h2.6z" fill="${c}" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/>${warn?'<circle cx="19.2" cy="4.8" r="3.8" fill="#E5A50A" stroke="#fff" stroke-width="1.2"/>':""}</svg>`,iconSize:[28,28],iconAnchor:[14,24]});
 let K=[],KbyId=new Map(),KofAGEB=new Map(),AGm=new Map(),LOCN={},kLayer=null;
 let A=[],R=[],M=[],X={},MUN={},CP=[],CPofAGEB=new Map(),cpLayer=null,D=[],dLayer=L.layerGroup();
 let E=[],CI={},CL=new Map(),eLayer=L.layerGroup(),stMaj=L.layerGroup(),stMin=L.layerGroup();
@@ -286,7 +293,7 @@ const map=L.map("map",{preferCanvas:true,zoomSnap:.5,minZoom:6,maxZoom:18,attrib
 map.attributionControl.setPrefix(false);
 map.createPane("munFill").style.zIndex=300;
 map.createPane("agebP").style.zIndex=410;
-map.createPane("cpP").style.zIndex=415;map.createPane("ruralP").style.zIndex=420;map.createPane("denueP").style.zIndex=425;map.createPane("escP").style.zIndex=427;map.createPane("calleP").style.zIndex=412;
+map.createPane("cpP").style.zIndex=415;map.createPane("ruralP").style.zIndex=420;map.createPane("denueP").style.zIndex=425;map.createPane("escP").style.zIndex=427;map.createPane("casaP").style.zIndex=640;map.createPane("calleP").style.zIndex=412;
 map.createPane("selP").style.zIndex=430;
 map.createPane("lblP").style.zIndex=650;
 const rMun=L.canvas({pane:"munFill"}),rA=L.canvas({pane:"agebP",tolerance:2}),rR=L.canvas({pane:"ruralP",tolerance:4}),rS=L.svg({pane:"selP"}),rC=L.canvas({pane:"cpP"}),rD=L.canvas({pane:"denueP",tolerance:4}),rE=L.canvas({pane:"escP",tolerance:4}),rSt=L.canvas({pane:"calleP"});
@@ -297,7 +304,7 @@ function toast(t,ms=4200){const e=$("#toast");e.textContent=t;e.hidden=false;cle
 
 /* ---------- carga ---------- */
 Promise.all(["data/agebs.json","data/rurales.json","data/municipios.json","data/extras.json"].map(u=>fetch(u).then(r=>{if(!r.ok)throw new Error(u);return r.json()})))
-.then(([a,r,m,x])=>{A=a;R=r;M=m;X=x;return Promise.all([fetch("data/colonias_cp.json").then(r=>r.ok?r.json():[]).catch(()=>[]),fetch("data/denue_salud.json").then(r=>r.ok?r.json():[]).catch(()=>[]),fetch("data/colonias.json").then(r=>r.ok?r.json():[]).catch(()=>[]),fetch("data/escuelas.json").then(r=>r.ok?r.json():[]).catch(()=>[]),fetch("data/unidades_medicas.json").then(r=>r.ok?r.json():[]).catch(()=>[]),fetch("data/calles/index.json").then(r=>r.ok?r.json():{}).catch(()=>({}))])}).then(([c,dd,kk,ee,mm,ci])=>{CP=c||[];D=dd||[];K=kk||[];E=ee||[];CI=ci||{};
+.then(([a,r,m,x])=>{A=a;R=r;M=m;X=x;return Promise.all([fetch("data/colonias_cp.json").then(r=>r.ok?r.json():[]).catch(()=>[]),fetch("data/denue_salud.json").then(r=>r.ok?r.json():[]).catch(()=>[]),fetch("data/colonias.json").then(r=>r.ok?r.json():[]).catch(()=>[]),fetch("data/casas.json").then(r=>r.ok?r.json():{sitios:[],rutas:{}}).catch(()=>({sitios:[],rutas:{}})),fetch("data/escuelas.json").then(r=>r.ok?r.json():[]).catch(()=>[]),fetch("data/unidades_medicas.json").then(r=>r.ok?r.json():[]).catch(()=>[]),fetch("data/calles/index.json").then(r=>r.ok?r.json():{}).catch(()=>({}))])}).then(([c,dd,kk,hh,ee,mm,ci])=>{CP=c||[];D=dd||[];K=kk||[];HS=hh.sitios||[];HR=hh.rutas||{};E=ee||[];CI=ci||{};
   for(const f of K){KbyId.set(f.properties.id,f.properties);for(const [a,pp] of f.properties.ag){if(!KofAGEB.has(a))KofAGEB.set(a,[]);KofAGEB.get(a).push([f.properties,pp])}}
   for(const f of A){AGm.set(f.properties.k,f.properties);LOCN["10"+f.properties.k.slice(2,9)]=f.properties.l}
   for(const u of (mm||[]))D.push({id:u.id,src:"MG",n:u.n||(u.t+" (sin nombre registrado)"),a:u.t+(u.st&&u.st!=="En Operación"?" · "+u.st:""),c:"mg",p:"",d:"",e:"",col:"",cp:"",m:u.m,l:u.l,t:"",x:u.x,y:u.y,lk:u.lk});for(const f of CP)for(const [k] of f.properties.ag){if(!CPofAGEB.has(k))CPofAGEB.set(k,[]);CPofAGEB.get(k).push(f.properties)}init()})
@@ -376,6 +383,11 @@ function render(first){
     const mk=L.circleMarker([s.y,s.x],{renderer:rE,pane:"escP",radius:4.6,color:k.c,weight:2.6,fillColor:"#ffffff",fillOpacity:1});
     mk.on("click",e=>{L.DomEvent.stop(e);select("E",s.id)});mk._s=s;eLayer.addLayer(mk)}
   eVis();loadStreets();
+  hLayer.clearLayers();
+  for(const h of HS){if(!inMun(h.m)||!onH.has(h.k))continue;
+    const mk=L.marker([h.y,h.x],{pane:"casaP",icon:houseIcon(HM[h.k].c,!!h.qa),title:h.n,keyboard:true});
+    mk.on("click",e=>{L.DomEvent.stop(e);select("H",h.id)});mk._h=h;hLayer.addLayer(mk)}
+  if(!map.hasLayer(hLayer))map.addLayer(hLayer);
   summary();updateLayerCounts();legendMini();labels();
 }
 function eVis(){const on=map.getZoom()>=12;if(on&&!map.hasLayer(eLayer))map.addLayer(eLayer);if(!on&&map.hasLayer(eLayer))map.removeLayer(eLayer)}
@@ -431,6 +443,7 @@ function labels(){
   if((S.plev==="ageb"&&z>=13.5)||z>=16.5){
     agebIdx.forEach((l,k)=>{if(n>450)return;const c=l.getBounds().getCenter();if(b.contains(c)){n++;lblLayer.addLayer(L.tooltip({permanent:true,direction:"center",className:"lbl",pane:"lblP",interactive:false}).setLatLng(c).setContent(k.slice(-4)+(S.pobl&&S.plev==="ageb"&&l.feature?`<small>${fmt(l.feature.properties.POBTOT)} hab.</small>`:"")))}});
   }
+  if(z>=9.5){let c=0;hLayer.eachLayer(l=>{if(c>80)return;const ll=l.getLatLng();if(b.contains(ll)){c++;lblLayer.addLayer(L.tooltip({permanent:true,direction:"bottom",offset:[0,2],className:"lbl casa",pane:"lblP",interactive:false}).setLatLng(ll).setContent(esc(l._h.k==="cap"?"Casa "+l._h.org:l._h.n)))}})}
   if(S.labels)streetLabels(b);
   if(z>=16.5){let c=0;eLayer.eachLayer(l=>{if(c>150||!map.hasLayer(eLayer))return;const ll=l.getLatLng();if(b.contains(ll)&&l._s.n){c++;lblLayer.addLayer(L.tooltip({permanent:true,direction:"bottom",offset:[0,5],className:"lbl esc",pane:"lblP",interactive:false}).setLatLng(ll).setContent(esc(l._s.n)))}})}
   if(z>=17){let c=0;dLayer.eachLayer(l=>{if(c>150)return;const ll=l.getLatLng();if(b.contains(ll)){c++;lblLayer.addLayer(L.tooltip({permanent:true,direction:"top",offset:[0,-5],className:"lbl",pane:"lblP",interactive:false}).setLatLng(ll).setContent(esc(l._d.n)))}})}
@@ -469,17 +482,20 @@ function buildLayersUI(){
   INST.forEach(i=>h+=`<label class="lyr" data-t="U" data-i="${i.id}"><span class="nm"><span class="sw" style="background:${i.c}"></span>${i.lab}</span><span class="ct"></span><input type="checkbox" ${S.onU.has(i.id)?"checked":""} aria-label="AGEB ${i.lab}"></label>`);
   h+=`<div class="grp">Localidades rurales (puntos, tamaño = población)</div>`;
   INST.filter(i=>i.id!=="IMSS ORDINARIO").forEach(i=>h+=`<label class="lyr" data-t="R" data-i="${i.id}"><span class="nm"><span class="sw pt" style="background:${i.c}"></span>${i.lab}</span><span class="ct"></span><input type="checkbox" ${S.onR.has(i.id)?"checked":""} aria-label="Localidades ${i.lab}"></label>`);
+  h+=`<div class="grp">Casas comunitarias y albergues</div>`;
+  HC.forEach(i=>h+=`<label class="lyr" data-t="H" data-i="${i.id}"><span class="nm"><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6 2.2 11h2.6v9.4h5.6v-5.6h3.2v5.6h5.6V11h2.6z" fill="${i.c}"/></svg>${i.lab}</span><span class="ct"></span><input type="checkbox" checked aria-label="${i.lab}"></label>`);
   h+=`<div class="grp">Escuelas · INEGI 2025 (desde zoom 12)</div>`;
   EC.forEach(i=>h+=`<label class="lyr" data-t="E" data-i="${i.id}"><span class="nm"><span class="sw pt" style="background:#fff;box-shadow:inset 0 0 0 2.5px ${i.c}"></span>${i.lab}</span><span class="ct"></span><input type="checkbox" checked aria-label="Escuelas ${i.lab}"></label>`);
   h+=`<div class="grp">Salud y asistencia (desde zoom 11)</div>`;
   DC.forEach(i=>h+=`<label class="lyr" data-t="D" data-i="${i.id}"><span class="nm"><span class="sw pt" style="background:${i.c};box-shadow:0 0 0 1.3px #1b1b1b"></span>${i.lab}</span><span class="ct"></span><input type="checkbox" ${onD.has(i.id)?"checked":""} aria-label="${i.lab}"></label>`);
   L1.innerHTML=h;
-  L1.querySelectorAll(".lyr input").forEach(cb=>cb.addEventListener("change",()=>{const p=cb.closest(".lyr"),set=p.dataset.t==="U"?S.onU:p.dataset.t==="R"?S.onR:p.dataset.t==="E"?onE:onD;cb.checked?set.add(p.dataset.i):set.delete(p.dataset.i);render()}));
+  L1.querySelectorAll(".lyr input").forEach(cb=>cb.addEventListener("change",()=>{const p=cb.closest(".lyr"),set=p.dataset.t==="U"?S.onU:p.dataset.t==="R"?S.onR:p.dataset.t==="E"?onE:p.dataset.t==="H"?onH:onD;cb.checked?set.add(p.dataset.i):set.delete(p.dataset.i);render()}));
 }
 function updateLayerCounts(){
   const o=agg();
   const dc={};for(const d of D)if(inMun(d.m))dc[d.c]=(dc[d.c]||0)+1;const ec={};for(const s of E)if(inMun(s.m))ec[eCat(s.t)]=(ec[eCat(s.t)]||0)+1;
-  document.querySelectorAll(".lyr").forEach(el=>{if(el.dataset.t==="E"){el.querySelector(".ct").textContent=fmt(ec[el.dataset.i]||0);el.classList.toggle("off",!onE.has(el.dataset.i));return}if(el.dataset.t==="D"){el.querySelector(".ct").textContent=fmt(dc[el.dataset.i]||0);el.classList.toggle("off",!onD.has(el.dataset.i));return}const v=o[el.dataset.i],u=el.dataset.t==="U";const n=u?v.u:v.r,p=u?v.up:v.rp;el.querySelector(".ct").textContent=fmt(n)+" · "+fmt(p)+" hab.";const on=(u?S.onU:S.onR).has(el.dataset.i)&&instOK(el.dataset.i);el.classList.toggle("off",!on)});
+  const hc={};for(const x of HS)if(inMun(x.m))hc[x.k]=(hc[x.k]||0)+1;
+  document.querySelectorAll(".lyr").forEach(el=>{if(el.dataset.t==="H"){el.querySelector(".ct").textContent=fmt(hc[el.dataset.i]||0);el.classList.toggle("off",!onH.has(el.dataset.i));return}if(el.dataset.t==="E"){el.querySelector(".ct").textContent=fmt(ec[el.dataset.i]||0);el.classList.toggle("off",!onE.has(el.dataset.i));return}if(el.dataset.t==="D"){el.querySelector(".ct").textContent=fmt(dc[el.dataset.i]||0);el.classList.toggle("off",!onD.has(el.dataset.i));return}const v=o[el.dataset.i],u=el.dataset.t==="U";const n=u?v.u:v.r,p=u?v.up:v.rp;el.querySelector(".ct").textContent=fmt(n)+" · "+fmt(p)+" hab.";const on=(u?S.onU:S.onR).has(el.dataset.i)&&instOK(el.dataset.i);el.classList.toggle("off",!on)});
 }
 function legendMini(){
   const vis=INST.filter(i=>instOK(i.id)&&(S.onU.has(i.id)||S.onR.has(i.id)));
@@ -511,6 +527,28 @@ function select(t,k,fly){
       <div class="chips"><span class="chip inst" style="background:${c}">${DM[p.c].lab}</span>${p.p?`<span class="chip">${esc(p.p)}</span>`:""}</div>
       <table>${p.d?`<tr><td>Domicilio</td><td>${esc(p.d)}</td></tr>`:""}${p.e?`<tr><td>Entre</td><td>${esc(p.e)}</td></tr>`:""}${p.col?`<tr><td>Colonia</td><td>${esc(p.col)}</td></tr>`:""}<tr><td>${p.cp?"CP · ":""}Localidad</td><td>${p.cp?esc(p.cp)+" · ":""}${esc(p.l)}</td></tr>${p.t?`<tr><td>Teléfono</td><td>${esc(p.t)}</td></tr>`:""}${resp}</table>
       <div class="foot">${p.src==="MG"?"Fuente: INEGI, Marco Geoestadístico 2025 (servicios). No trae domicilio ni institución; para el catálogo oficial de unidades usa CLUES.":"Fuente: DENUE (INEGI), sector 62. Ubicación y domicilio como los registró el INEGI."}</div>`;
+  }else if(t==="H"){
+    p=HS.find(x=>x.id===k);if(!p)return;c=HM[p.k].c;
+    selLayer.addLayer(L.circleMarker([p.y,p.x],{renderer:rS,pane:"selP",radius:16,color:"#111",weight:2.5,fill:false,dashArray:"4 3"}));
+    tgt={p:[p.y,p.x],z:Math.max(map.getZoom(),p.k==="cap"?16:12)};
+    let resp="";if(p.lk){const q=p.lk[0]==="U"?AGm.get(p.lk[1]):R.find(r=>r.k===p.lk[1]);if(q)resp=`<tr><td>¿Quién vacuna aquí?</td><td><a href="#" id="goLk" style="color:${IM[q.i].c}">${IM[q.i].lab}</a><div style="font-size:11.5px;color:var(--muted);font-weight:400">${p.lk[0]==="U"?"AGEB urbana "+esc(q.a):"Localidad "+esc(q.n)}</div></td></tr>`}
+    const key=norm(p.k==="inpi"?p.ccpi:(p.org||""));
+    const rk=Object.keys(HR).find(r=>p.k==="inpi"?key.includes(norm(r)):(norm(HR[r].sal+" "+HR[r].proc).includes(key)));
+    const ru=rk?HR[rk]:null;
+    const orgL=p.orgk?R.find(r=>r.k===p.orgk):null;
+    html=`<header><div><h3>${esc(p.n)}</h3><div class="k">${p.k==="cap"?"Casa de la comunidad · Victoria de Durango":esc(p.ccpi)+" · "+esc(p.mun)}</div></div><button class="x" aria-label="Cerrar ficha">×</button></header>
+      <div class="chips"><span class="chip inst" style="background:${c}">${p.k==="cap"?"Albergue / casa de la comunidad":"INPI"}</span>${p.ben?`<span class="chip">${fmt(p.ben)} beneficiarios</span>`:""}${p.qa?`<span class="chip warn">Revisar datos</span>`:""}</div>
+      <table>
+        <tr><td>Domicilio</td><td>${esc(p.dir)}</td></tr><tr><td>CP · Localidad</td><td>${esc(p.cp)} · ${esc(p.l)}</td></tr>
+        ${p.k==="cap"?`<tr><td>Comunidad de origen</td><td>${orgL?`<button class="collink" id="goOrg">${esc(p.org)}</button>`:esc(p.org)}</td></tr>
+        <tr><td>Población de origen (estimada)</td><td>${fmt(p.pob)}</td></tr><tr><td>Capacidad de albergue</td><td>${esc(p.cap)}</td></tr><tr><td>Responsable de la casa</td><td>${esc(p.resp)}</td></tr>`:""}
+        ${resp}
+      </table>
+      ${p.sv&&p.sv.length?`<h4>Servicios</h4><table>${p.sv.map(s=>`<tr><td>${esc(s.f)}<div style="font-size:11.5px;color:var(--muted);font-weight:400">${esc(s.mod)}</div></td><td>${fmt(s.ben)} benef.</td></tr>`).join("")}</table>`:""}
+      ${p.nota?`<div class="foot" style="color:var(--ink)">${esc(p.nota)}</div>`:""}
+      ${ru?`<h4>Rutas de jornaleros${p.k==="inpi"?" · "+esc(p.ccpi):" desde su comunidad"}</h4><table>${ru.dest.map(d=>`<tr><td>${esc(d[0])}</td><td style="font-weight:400">${esc(d[1])}</td></tr>`).join("")}</table><div class="foot">Salen de: ${esc(ru.sal)}</div>`:""}
+      ${p.qa?`<div class="foot" style="color:#8a5a00;background:#fff6e0;margin:6px 14px;border-radius:6px;padding:8px 10px">⚠ ${esc(p.qa)}</div>`:""}
+      <div class="foot">Fuente: archivo de casas comunitarias (ciudad de Durango y Mezquital; censo de beneficiarios INPI). La institución que vacuna se toma de la microrregionalización según la ubicación.</div>`;
   }else if(t==="K"){
     const f=K.find(x=>x.properties.id===k);if(!f)return;p=f.properties;c="#7A1430";
     const g=L.geoJSON(f,{renderer:rS,pane:"selP",style:{color:"#7A1430",weight:3,fill:true,fillColor:"#7A1430",fillOpacity:.08}});selLayer.addLayer(g);tgt={b:g.getBounds(),z:16};
@@ -560,7 +598,8 @@ function select(t,k,fly){
   const card=$("#card");card.style.setProperty("--c",c);card.innerHTML=html;card.hidden=false;
   card.querySelector(".x").onclick=()=>{card.hidden=true;selLayer.clearLayers()};
   card.querySelectorAll(".collink").forEach(b=>b.onclick=()=>{if(b.dataset.k){setPlev("col");select("K",b.dataset.k,true)}else{setPlev("cp");select("C",b.dataset.cp,true)}});
-  const gl=card.querySelector("#goLk");if(gl)gl.onclick=e=>{e.preventDefault();const p2=t==="E"?E.find(s=>s.id===k):D.find(d=>d.id===k);ensureVisible(p2.lk[0],(p2.lk[0]==="U"?A.find(f=>f.properties.k===p2.lk[1]).properties:R.find(r=>r.k===p2.lk[1])).i);render();select(p2.lk[0],p2.lk[1],true)};
+  const go=card.querySelector("#goOrg");if(go)go.onclick=()=>{const p2=HS.find(x=>x.id===k),r=R.find(x=>x.k===p2.orgk);if(S.mun&&S.mun!==r.m){S.mun="";$("#fMun").value="";fillCol()}ensureVisible("R",r.i);render();select("R",r.k,true)};
+  const gl=card.querySelector("#goLk");if(gl)gl.onclick=e=>{e.preventDefault();const p2=t==="E"?E.find(s=>s.id===k):t==="H"?HS.find(x=>x.id===k):D.find(d=>d.id===k);ensureVisible(p2.lk[0],(p2.lk[0]==="U"?A.find(f=>f.properties.k===p2.lk[1]).properties:R.find(r=>r.k===p2.lk[1])).i);render();select(p2.lk[0],p2.lk[1],true)};
   S.sel={t,k};
   if(mq.matches)setSheet("peek");
   if(fly&&tgt)focusTo(tgt);
@@ -586,6 +625,7 @@ $("#q").addEventListener("input",e=>{
   hits.push(...locs.values());
   let kh=0;if(q.length>=3)for(const f of K){const p=f.properties;if(norm(p.n).includes(q)){kh++;hits.push({t:"K",k:p.id,lab:p.n,sub:(p.t||"Colonia")+(p.cp?" · CP "+p.cp:"")+" · "+(LOCN[p.loc]||MUN[p.m]||"")+" · "+fmt(p.pob)+" hab.",c:"#7A1430"})}}
   for(const f of CP){const p=f.properties;if(p.cp.startsWith(q)&&q.length>=3){hits.push({t:"C",k:p.cp,lab:"CP "+p.cp+" · "+p.a[0][0],sub:"Zona postal · "+(MUN[p.m]||"")+(p.pob&&p.pob.POBTOT?" · "+fmt(p.pob.POBTOT)+" hab.":""),c:"#7A1430"});continue}if(!kh)for(const [n,tp] of p.a)if(norm(n).includes(q)){hits.push({t:"C",k:p.cp,lab:n,sub:tp+" · CP "+p.cp+" · "+(p.c||MUN[p.m]||"")+(p.pob&&p.pob.POBTOT?" · ≈ "+fmt(p.pob.POBTOT)+" hab. en el CP":""),c:"#7A1430"});break}}
+  for(const h of HS){if(norm(h.n+" "+(h.org||"")+" "+(h.ccpi||"")+" "+h.l).includes(q))hits.push({t:"H",k:h.id,lab:h.n,sub:(h.k==="cap"?"Casa de la comunidad · Victoria de Durango":"INPI · "+h.ccpi+" · "+h.mun)+(h.ben?" · "+fmt(h.ben)+" beneficiarios":""),c:HM[h.k].c,pt:1})}
   if(q.length>=3)for(const s of E){if(s.n&&norm(s.n).includes(q))hits.push({t:"E",k:s.id,lab:s.n,sub:"Escuela "+s.t.toLowerCase()+" · "+s.l+" · "+(MUN[s.m]||""),c:EM[eCat(s.t)].c,pt:1})}
   if(q.length>=3)for(const d of D){if(norm(d.n).includes(q))hits.push({t:"D",k:d.id,lab:d.n,sub:DM[d.c].lab+" · "+d.l+" · "+d.d,c:DM[d.c].c,pt:1})}
   for(const p of R){if(norm(p.n).includes(q)||p.k.startsWith(q))hits.push({t:"R",k:p.k,lab:p.n,sub:"Rural · "+(MUN[p.m]||"")+" · "+IM[p.i].lab+" · "+fmt(p.POBTOTE)+" hab.",c:IM[p.i].c,pt:1})}
@@ -609,6 +649,7 @@ function pick(h){
   if(h.t==="K"){const p=KbyId.get(h.k);if(S.mun&&p&&S.mun!==p.m){S.mun="";$("#fMun").value="";fillCol();render()}setPlev("col");select("K",h.k,true);return}
   if(h.t==="C"){const f=CP.find(f=>f.properties.cp===h.k);if(S.mun&&f&&S.mun!==f.properties.m){S.mun="";$("#fMun").value="";fillCol();render()}setPlev("cp");select("C",h.k,true);return}
   if(h.t==="L"){const fs=A.filter(f=>f.properties.m===h.k&&f.properties.l===h.l);if(S.mun&&S.mun!==h.k)setMun("",true);render();focusTo({b:L.geoJSON({type:"FeatureCollection",features:fs}).getBounds(),z:16});return}
+  if(h.t==="H"){const x=HS.find(y=>y.id===h.k);if(S.mun&&S.mun!==x.m){S.mun="";$("#fMun").value="";fillCol()}if(!onH.has(x.k)){onH.add(x.k);document.querySelector(`.lyr[data-t="H"][data-i="${x.k}"] input`).checked=true}render();select("H",h.k,true);return}
   if(h.t==="E"){const s=E.find(x=>x.id===h.k);if(S.mun&&S.mun!==s.m){S.mun="";$("#fMun").value="";fillCol()}if(!onE.has(eCat(s.t))){onE.add(eCat(s.t));document.querySelector(`.lyr[data-t="E"][data-i="${eCat(s.t)}"] input`).checked=true}render();select("E",h.k,true);return}
   if(h.t==="D"){const d=D.find(x=>x.id===h.k);if(S.mun&&S.mun!==d.m){S.mun="";$("#fMun").value=""}if(!onD.has(d.c)){onD.add(d.c);document.querySelector(`.lyr[data-t="D"][data-i="${d.c}"] input`).checked=true}render();select("D",h.k,true);return}
   const p=h.t==="U"?A.find(f=>f.properties.k===h.k).properties:R.find(r=>r.k===h.k);
@@ -687,6 +728,7 @@ function notes(){
   <p><b>Cobertura del mapa:</b> ${fmt(A.length)} de ${fmt(A.length+um.length)} AGEB urbanas y ${fmt(R.length)} de ${fmt(R.length)} localidades rurales. Sin polígono: ${um.map(u=>"AGEB "+esc(u.a)+" de "+esc(u.l)+" ("+fmt(u.POBTOT)+" hab., "+esc(u.i)+")").join("; ")}.</p>
   <p><b>Colonias:</b> ${fmt(CP.length)} zonas de código postal urbanas con ${fmt(CP.reduce((s,f)=>s+f.properties.a.length,0))} colonias y fraccionamientos (polígonos y catálogo de SEPOMEX/Correos de México, copias públicas en GitHub; fecha de corte no confirmada). Un código postal puede agrupar varias colonias, por eso se rotulan por zona postal.</p>
   <p><b>Salud y asistencia:</b> ${fmt(D.length)} establecimientos del DENUE (INEGI, sector 62) en Durango, ligados a su AGEB. El DENUE casi no registra unidades rurales; para el inventario oficial de unidades de salud la fuente es CLUES.</p>
+  <p><b>Casas comunitarias y albergues:</b> ${fmt(HS.length)} sitios (4 casas de la comunidad en Victoria de Durango y ${fmt(HS.filter(h=>h.k==="inpi").length)} localidades con casas y comedores de la niñez indígena del INPI), con rutas de jornaleros por CCPI. ${fmt(HS.filter(h=>h.qa).length)} sitios tienen observaciones de ubicación (ícono con punto amarillo). Los datos de contacto no se publican.</p>
   <p><b>Población por colonia:</b> ${fmt(K.length)} colonias armadas con las manzanas del Censo 2020 (población) y la colonia que el DENUE (INEGI, 2025) registra en cada manzana; las manzanas sin negocios toman la colonia de la manzana vecina más cercana. Los contornos son aproximados.</p>
   <p><b>Calles, escuelas y unidades médicas:</b> INEGI, Marco Geoestadístico 2025 de Durango (ejes de vialidad con nombre en ${fmt(Object.keys(CI).length)} localidades; ${fmt(E.length)} escuelas; ${fmt(D.filter(d=>d.src==="MG").length)} centros de salud y hospitales). Las escuelas no traen clave CCT ni si son públicas o privadas.</p>
   <p>Las 61 localidades urbanas se asignan por AGEB, por eso no aparecen como punto en la capa rural.</p>`;
