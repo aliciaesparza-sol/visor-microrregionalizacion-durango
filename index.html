@@ -55,6 +55,14 @@ input[type=search]:focus,select:focus{background:#fff}
 .lbl.col span{display:inline-block;transform:translate(-50%,-50%);padding:1px 3px;border-radius:4px}
 .lbl.col span:hover{background:rgba(255,255,255,.9);text-decoration:underline}
 .collink{border:0;background:none;padding:0;color:var(--guinda);cursor:pointer;text-align:left;font:inherit;text-decoration:underline;text-underline-offset:2px}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);border:1.5px solid var(--guinda);border-radius:9px;overflow:hidden}
+.seg button{border:0;background:#fff;padding:8px 4px;font-weight:600;color:var(--guinda);cursor:pointer;font-size:13px}
+.seg button+button{border-left:1.5px solid var(--guinda)}
+.seg button[aria-pressed="true"]{background:var(--guinda);color:#fff}
+.lbl.kol{cursor:pointer;pointer-events:auto}
+.lbl.kol span{display:inline-block;transform:translate(-50%,-50%);font:700 11.5px/1.15 var(--body);color:#5b1024;text-align:center;white-space:nowrap;padding:1px 3px;border-radius:4px;text-shadow:0 0 2px #fff,0 0 3px #fff,0 0 3px #fff}
+.lbl.kol span small{color:#5b1024;font-weight:600}
+.lbl.kol span:hover{background:rgba(255,255,255,.92);text-decoration:underline}
 .ihead{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
 .ihead h2{margin:0 0 8px}
 .quick{display:flex;gap:10px}
@@ -199,6 +207,11 @@ input[type=range]{width:100%;accent-color:var(--guinda)}
         <p class="hint" id="ihint">Toca cada institución para prenderla o apagarla; puedes combinar las que quieras.</p>
       </div>
       <div class="sec">
+        <h2>Ver población por</h2>
+        <div class="seg" role="group" aria-label="Ver población por"><button data-v="col" aria-pressed="true">Colonia</button><button data-v="ageb" aria-pressed="false">AGEB</button><button data-v="cp" aria-pressed="false">Código postal</button></div>
+        <p class="hint" id="plevHint"></p>
+      </div>
+      <div class="sec">
         <h2 id="sumTitle">Resumen · Todo el estado</h2>
         <table class="sum" id="sum"></table>
       </div>
@@ -214,7 +227,6 @@ input[type=range]{width:100%;accent-color:var(--guinda)}
           <div class="sw-row"><span>Resaltar localidades reasignadas<small>Rurales que estaban "sin cobertura" y se asignaron en Reunión 5</small></span><input class="switch" type="checkbox" id="reas" aria-label="Resaltar localidades reasignadas"></div>
           <div class="sw-row"><span>Población en las etiquetas<small>Habitantes por AGEB (Censo 2020) y estimados por colonia</small></span><input class="switch" type="checkbox" id="pobl" checked aria-label="Población en las etiquetas"></div>
           <div class="sw-row"><span>Calles con nombre (INEGI 2025)<small>Avenidas y bulevares desde zoom 14; todas las calles desde zoom 15</small></span><input class="switch" type="checkbox" id="calles" checked aria-label="Calles con nombre"></div>
-          <div class="sw-row"><span>Colonias (zonas de código postal)<small>Contorno desde zoom 12, nombres desde zoom 13.5</small></span><input class="switch" type="checkbox" id="cols" checked aria-label="Colonias"></div>
           <div class="sw-row"><span>Límites municipales</span><input class="switch" type="checkbox" id="munl" checked aria-label="Límites municipales"></div>
           <div class="field"><label for="base">Mapa base</label>
             <select id="base">
@@ -257,7 +269,8 @@ const pct=(a,b)=>b?(100*a/b).toLocaleString("es-MX",{maximumFractionDigits:1})+"
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
-const S={mun:"",inst:"",onU:new Set(INST.map(i=>i.id)),onR:new Set(INST.map(i=>i.id).filter(i=>i!=="IMSS ORDINARIO")),op:.6,labels:true,reas:false,munl:true,col:true,calles:true,pobl:true,isel:new Set(INST.map(i=>i.id)),base:"none",sel:null};
+const S={mun:"",inst:"",onU:new Set(INST.map(i=>i.id)),onR:new Set(INST.map(i=>i.id).filter(i=>i!=="IMSS ORDINARIO")),op:.6,labels:true,reas:false,munl:true,col:true,calles:true,pobl:true,plev:"col",isel:new Set(INST.map(i=>i.id)),base:"none",sel:null};
+let K=[],KbyId=new Map(),KofAGEB=new Map(),AGm=new Map(),LOCN={},kLayer=null;
 let A=[],R=[],M=[],X={},MUN={},CP=[],CPofAGEB=new Map(),cpLayer=null,D=[],dLayer=L.layerGroup();
 let E=[],CI={},CL=new Map(),eLayer=L.layerGroup(),stMaj=L.layerGroup(),stMin=L.layerGroup();
 const EC=[{id:"Preescolar",lab:"Preescolar",c:"#D99100"},{id:"Primaria",lab:"Primaria",c:"#0F8B8D"},{id:"Secundaria",lab:"Secundaria",c:"#6A4C93"},{id:"Media Superior",lab:"Media superior",c:"#C2410C"},{id:"Superior",lab:"Superior y otras",c:"#1F2937"}];
@@ -282,7 +295,9 @@ function toast(t,ms=4200){const e=$("#toast");e.textContent=t;e.hidden=false;cle
 
 /* ---------- carga ---------- */
 Promise.all(["data/agebs.json","data/rurales.json","data/municipios.json","data/extras.json"].map(u=>fetch(u).then(r=>{if(!r.ok)throw new Error(u);return r.json()})))
-.then(([a,r,m,x])=>{A=a;R=r;M=m;X=x;return Promise.all([fetch("data/colonias_cp.json").then(r=>r.ok?r.json():[]).catch(()=>[]),fetch("data/denue_salud.json").then(r=>r.ok?r.json():[]).catch(()=>[]),fetch("data/escuelas.json").then(r=>r.ok?r.json():[]).catch(()=>[]),fetch("data/unidades_medicas.json").then(r=>r.ok?r.json():[]).catch(()=>[]),fetch("data/calles/index.json").then(r=>r.ok?r.json():{}).catch(()=>({}))])}).then(([c,dd,ee,mm,ci])=>{CP=c||[];D=dd||[];E=ee||[];CI=ci||{};
+.then(([a,r,m,x])=>{A=a;R=r;M=m;X=x;return Promise.all([fetch("data/colonias_cp.json").then(r=>r.ok?r.json():[]).catch(()=>[]),fetch("data/denue_salud.json").then(r=>r.ok?r.json():[]).catch(()=>[]),fetch("data/colonias.json").then(r=>r.ok?r.json():[]).catch(()=>[]),fetch("data/escuelas.json").then(r=>r.ok?r.json():[]).catch(()=>[]),fetch("data/unidades_medicas.json").then(r=>r.ok?r.json():[]).catch(()=>[]),fetch("data/calles/index.json").then(r=>r.ok?r.json():{}).catch(()=>({}))])}).then(([c,dd,kk,ee,mm,ci])=>{CP=c||[];D=dd||[];K=kk||[];E=ee||[];CI=ci||{};
+  for(const f of K){KbyId.set(f.properties.id,f.properties);for(const [a,pp] of f.properties.ag){if(!KofAGEB.has(a))KofAGEB.set(a,[]);KofAGEB.get(a).push([f.properties,pp])}}
+  for(const f of A){AGm.set(f.properties.k,f.properties);LOCN["10"+f.properties.k.slice(2,9)]=f.properties.l}
   for(const u of (mm||[]))D.push({id:u.id,src:"MG",n:u.n||(u.t+" (sin nombre registrado)"),a:u.t+(u.st&&u.st!=="En Operación"?" · "+u.st:""),c:"mg",p:"",d:"",e:"",col:"",cp:"",m:u.m,l:u.l,t:"",x:u.x,y:u.y,lk:u.lk});for(const f of CP)for(const [k] of f.properties.ag){if(!CPofAGEB.has(k))CPofAGEB.set(k,[]);CPofAGEB.get(k).push(f.properties)}init()})
 .catch(e=>{$("#loading").textContent="No se pudieron cargar los datos ("+e.message+"). Verifica que la carpeta data/ esté junto a este archivo y que se abra desde un servidor web.";});
 
@@ -314,7 +329,7 @@ function init(){
   map.fitBounds(munLayer.getBounds(),matchMedia("(max-width:820px)").matches?{paddingTopLeft:[10,10],paddingBottomRight:[10,150]}:{padding:[10,10]});
   buildLayersUI();notes();setBase("osm",true);render(true);
   $("#loading").hidden=true;
-  map.on("zoomend",()=>{cpVis();dVis();eVis()});
+  map.on("zoomend",()=>{cpVis();kVis();dVis();eVis()});
   map.on("moveend",loadStreets);
   map.on("zoomend moveend",labels);
   map.on("zoomend",()=>{for(const p of R){const m=ruralIdx.get(p.k);if(m)m.setRadius(rRadius(p))}});
@@ -345,6 +360,10 @@ function render(first){
   if(cpLayer)map.removeLayer(cpLayer);
   cpLayer=L.geoJSON({type:"FeatureCollection",features:CP.filter(f=>inMun(f.properties.m))},{renderer:rC,pane:"cpP",interactive:false,style:{color:"#7A1430",weight:.9,opacity:.75,dashArray:"4 3",fill:false}});
   cpVis();
+  if(kLayer)map.removeLayer(kLayer);
+  kLayer=L.geoJSON({type:"FeatureCollection",features:K.filter(f=>inMun(f.properties.m))},{renderer:rC,pane:"cpP",style:{color:"#7A1430",weight:1.2,opacity:.85,fill:true,fillOpacity:0},
+    onEachFeature:(f,l)=>l.on("click",e=>{L.DomEvent.stop(e);select("K",f.properties.id)})});
+  kVis();
   dLayer.clearLayers();
   for(const d of D){if(!inMun(d.m)||!onD.has(d.c))continue;const k=DM[d.c];
     const mk=L.circleMarker([d.y,d.x],{renderer:rD,pane:"denueP",radius:d.c==="pub"||d.c==="hpriv"?5:4,color:"#1b1b1b",weight:1.3,fillColor:k.c,fillOpacity:1});
@@ -391,20 +410,24 @@ function streetLabels(b){
         acc+=l}}}
 }
 function dVis(){const on=map.getZoom()>=11;if(on&&!map.hasLayer(dLayer))map.addLayer(dLayer);if(!on&&map.hasLayer(dLayer))map.removeLayer(dLayer)}
-function cpVis(){if(!cpLayer)return;const on=S.col&&map.getZoom()>=12;if(on&&!map.hasLayer(cpLayer))map.addLayer(cpLayer);if(!on&&map.hasLayer(cpLayer))map.removeLayer(cpLayer)}
+function kVis(){if(!kLayer)return;const on=S.plev==="col"&&map.getZoom()>=13.5;if(on&&!map.hasLayer(kLayer))map.addLayer(kLayer);if(!on&&map.hasLayer(kLayer))map.removeLayer(kLayer)}
+function cpVis(){if(!cpLayer)return;const on=S.plev==="cp"&&map.getZoom()>=11.5;if(on&&!map.hasLayer(cpLayer))map.addLayer(cpLayer);if(!on&&map.hasLayer(cpLayer))map.removeLayer(cpLayer)}
 
 /* ---------- etiquetas ---------- */
 function labels(){
   lblLayer.clearLayers();
   const z=map.getZoom(),b=map.getBounds().pad(.05);
   if(z>=7.75&&z<10&&S.munl){lblLayer.addLayer(munLbl)}
-  if(S.col&&z>=13.5){let c=0;for(const f of CP){if(c>220)break;const p=f.properties;if(!inMun(p.m))continue;const ll=L.latLng(p.ly,p.lx);if(!b.contains(ll))continue;c++;
-      const nm=p.a.map(x=>x[0]),k=z>=15?4:1,pp=S.pobl&&p.pob&&p.pob.POBTOT?` · ≈ ${fmt(p.pob.POBTOT)} hab.`:"",txt=esc(nm.slice(0,k).join(" · "))+(nm.length>k?` <small>+${nm.length-k} más · CP ${p.cp}${pp}</small>`:` <small>CP ${p.cp}${pp}</small>`);
+  if(S.plev==="col"&&z>=14){let c=0;const vis=K.filter(f=>{const p=f.properties;return inMun(p.m)&&b.contains([p.ly,p.lx])}).sort((a,b2)=>b2.properties.pob-a.properties.pob);
+    for(const f of vis){if(c>(mq.matches?120:260))break;const p=f.properties;if(z<15&&p.pob<150)continue;c++;
+      lblLayer.addLayer(L.marker([p.ly,p.lx],{pane:"lblP",keyboard:false,icon:L.divIcon({className:"lbl kol",html:`<span title="Ver la colonia">${esc(p.n)}${S.pobl?`<small>${fmt(p.pob)} hab.</small>`:""}</span>`,iconSize:null})}).on("click",e=>{L.DomEvent.stop(e);select("K",p.id)}))}}
+  if(S.plev==="cp"&&z>=12){let c=0;for(const f of CP){if(c>220)break;const p=f.properties;if(!inMun(p.m))continue;const ll=L.latLng(p.ly,p.lx);if(!b.contains(ll))continue;c++;
+      const nm=p.a.map(x=>x[0]),pp=S.pobl&&p.pob&&p.pob.POBTOT?` · ${fmt(p.pob.POBTOT)} hab.`:"",txt=`CP ${p.cp}<small>${z>=14?esc(nm.slice(0,2).join(" · "))+(nm.length>2?` +${nm.length-2}`:"")+pp:pp.replace(" · ","")}</small>`;
       lblLayer.addLayer(L.marker(ll,{pane:"lblP",keyboard:false,icon:L.divIcon({className:"lbl col",html:`<span title="Ver colonias de este código postal">${txt}</span>`,iconSize:null})}).on("click",e=>{L.DomEvent.stop(e);select("C",p.cp)}))}}
   if(!S.labels)return;
   let n=0;
-  if(z>=14){
-    agebIdx.forEach((l,k)=>{if(n>450)return;const c=l.getBounds().getCenter();if(b.contains(c)){n++;lblLayer.addLayer(L.tooltip({permanent:true,direction:"center",className:"lbl",pane:"lblP",interactive:false}).setLatLng(c).setContent(k.slice(-4)+(S.pobl&&l.feature?`<small>${fmt(l.feature.properties.POBTOT)} hab.</small>`:"")))}});
+  if((S.plev==="ageb"&&z>=13.5)||z>=16.5){
+    agebIdx.forEach((l,k)=>{if(n>450)return;const c=l.getBounds().getCenter();if(b.contains(c)){n++;lblLayer.addLayer(L.tooltip({permanent:true,direction:"center",className:"lbl",pane:"lblP",interactive:false}).setLatLng(c).setContent(k.slice(-4)+(S.pobl&&S.plev==="ageb"&&l.feature?`<small>${fmt(l.feature.properties.POBTOT)} hab.</small>`:"")))}});
   }
   if(S.labels)streetLabels(b);
   if(z>=16.5){let c=0;eLayer.eachLayer(l=>{if(c>150||!map.hasLayer(eLayer))return;const ll=l.getLatLng();if(b.contains(ll)&&l._s.n){c++;lblLayer.addLayer(L.tooltip({permanent:true,direction:"bottom",offset:[0,5],className:"lbl esc",pane:"lblP",interactive:false}).setLatLng(ll).setContent(esc(l._s.n)))}})}
@@ -475,8 +498,8 @@ function select(t,k,fly){
     html=`<header><div><h3>AGEB ${esc(p.a)} · ${esc(p.l)}</h3><div class="k">${esc(MUN[p.m]||p.m)} · CVEGEO ${esc(p.k)}</div></div><button class="x" aria-label="Cerrar ficha">×</button></header>
       <div class="chips"><span class="chip inst" style="background:${c}">${IM[p.i].lab}</span><span class="chip">AGEB urbana</span></div>
       <table>${UF.map(([f,l])=>`<tr><td>${l}</td><td>${fmt(p[f])}</td></tr>`).join("")}</table>
-      ${(()=>{const cs=CPofAGEB.get(p.k)||[];if(!cs.length)return"";const nm=[...new Set(cs.flatMap(c=>c.a.map(x=>x[0])))];const cpOf=n=>(cs.find(c=>c.a.some(x=>x[0]===n))||{}).cp;return `<h4>Colonias en la zona (SEPOMEX, CP ${[...new Set(cs.map(c=>c.cp))].join(", ")})</h4><ul>${nm.slice(0,12).map(x=>`<li><button class="collink" data-cp="${cpOf(x)}">${esc(x)}</button></li>`).join("")}${nm.length>12?`<li>y ${nm.length-12} más</li>`:""}</ul>`})()}
-      <div class="foot">Población: Censo 2020 por AGEB, según el archivo de microrregionalización urbana. Las colonias se ubican por zona de código postal, que no coincide exactamente con el límite del AGEB.</div>`;
+      ${(()=>{const ks=(KofAGEB.get(p.k)||[]).slice().sort((a,b2)=>b2[1]-a[1]);if(!ks.length)return"";const cps=[...new Set(ks.map(x=>x[0].cp).filter(Boolean))];return `<h4>Colonias en este AGEB${cps.length?" · CP "+cps.join(", "):""}</h4><table>${ks.slice(0,15).map(([kp,pp])=>`<tr><td><button class="collink" data-k="${kp.id}">${esc(kp.n)}</button></td><td>${fmt(pp)} hab.</td></tr>`).join("")}</table>${ks.length>15?`<p class="foot">y ${ks.length-15} más</p>`:""}`})()}
+      <div class="foot">Población: Censo 2020 por AGEB (archivo de microrregionalización). Habitantes por colonia dentro del AGEB: suma de manzanas del Censo 2020.</div>`;
   }else if(t==="D"){
     p=D.find(d=>d.id===k);if(!p)return;c=DM[p.c].c;
     selLayer.addLayer(L.circleMarker([p.y,p.x],{renderer:rS,pane:"selP",radius:11,color:"#111",weight:2.5,fill:false,dashArray:"4 3"}));
@@ -486,6 +509,17 @@ function select(t,k,fly){
       <div class="chips"><span class="chip inst" style="background:${c}">${DM[p.c].lab}</span>${p.p?`<span class="chip">${esc(p.p)}</span>`:""}</div>
       <table>${p.d?`<tr><td>Domicilio</td><td>${esc(p.d)}</td></tr>`:""}${p.e?`<tr><td>Entre</td><td>${esc(p.e)}</td></tr>`:""}${p.col?`<tr><td>Colonia</td><td>${esc(p.col)}</td></tr>`:""}<tr><td>${p.cp?"CP · ":""}Localidad</td><td>${p.cp?esc(p.cp)+" · ":""}${esc(p.l)}</td></tr>${p.t?`<tr><td>Teléfono</td><td>${esc(p.t)}</td></tr>`:""}${resp}</table>
       <div class="foot">${p.src==="MG"?"Fuente: INEGI, Marco Geoestadístico 2025 (servicios). No trae domicilio ni institución; para el catálogo oficial de unidades usa CLUES.":"Fuente: DENUE (INEGI), sector 62. Ubicación y domicilio como los registró el INEGI."}</div>`;
+  }else if(t==="K"){
+    const f=K.find(x=>x.properties.id===k);if(!f)return;p=f.properties;c="#7A1430";
+    const g=L.geoJSON(f,{renderer:rS,pane:"selP",style:{color:"#7A1430",weight:3,fill:true,fillColor:"#7A1430",fillOpacity:.08}});selLayer.addLayer(g);tgt={b:g.getBounds(),z:16};
+    const PG=[["P_0A2","0 a 2 años"],["P_3A5","3 a 5 años"],["P_6A11","6 a 11 años"],["P_12A14","12 a 14 años"],["P_15A17","15 a 17 años"],["P_15A49_F","Mujeres 15 a 49 años"],["P_60YMAS","60 años y más"]];
+    const byI={};for(const [a,pp] of p.ag){const q=AGm.get(a);if(!q)continue;(byI[q.i]=byI[q.i]||[]).push([q.a,pp])}
+    html=`<header><div><h3>${esc(p.n)}</h3><div class="k">${esc(p.t||"Asentamiento")}${p.cp?` · <button class="collink" data-cp="${esc(p.cp)}">CP ${esc(p.cp)}</button>`:""} · ${esc(LOCN[p.loc]||"")}${LOCN[p.loc]?", ":""}${esc(MUN[p.m]||p.m)}</div></div><button class="x" aria-label="Cerrar ficha">×</button></header>
+      <div class="chips"><span class="chip inst" style="background:#7A1430">${fmt(p.pob)} habitantes · Censo 2020</span><span class="chip">${fmt(p.nmz)} manzanas</span></div>
+      <h4>¿Quién vacuna aquí?</h4>
+      <table>${INST.filter(i=>p.pi[i.id]).map(i=>`<tr><td><span class="sw" style="background:${i.c}"></span> ${i.lab}<div style="font-size:11.5px;color:var(--muted)">AGEB ${byI[i.id].map(x=>x[0]).join(", ")}</div></td><td>${fmt(p.pi[i.id])} hab.</td></tr>`).join("")||`<tr><td colspan="2">Sin AGEB de la microrregionalización</td></tr>`}</table>
+      <h4>Población por edad (estimada)</h4><table>${PG.map(([x,l])=>`<tr><td>${l}</td><td>≈ ${fmt(p.g[x])}</td></tr>`).join("")}</table>
+      <div class="foot">Habitantes: suma de las manzanas de la colonia en el Censo 2020 (INEGI). Los grupos de edad se estiman con la proporción de cada AGEB. El contorno se arma con las manzanas que el DENUE (INEGI) ubica en esta colonia, más las vecinas sin negocios registrados; es aproximado.</div>`;
   }else if(t==="E"){
     p=E.find(s=>s.id===k);if(!p)return;c=EM[eCat(p.t)].c;
     selLayer.addLayer(L.circleMarker([p.y,p.x],{renderer:rS,pane:"selP",radius:11,color:"#111",weight:2.5,fill:false,dashArray:"4 3"}));
@@ -504,12 +538,12 @@ function select(t,k,fly){
     const PG=[["P_0A2","0 a 2 años"],["P_3A5","3 a 5 años"],["P_6A11","6 a 11 años"],["P_12A14","12 a 14 años"],["P_15A17","15 a 17 años"],["P_15A49_F","Mujeres 15 a 49 años"],["P_60YMAS","60 años y más"]];const pob=p.pob||{},pi=p.pi||{};
     const nm=p.a;
     html=`<header><div><h3>Código postal ${esc(p.cp)}</h3><div class="k">${esc(p.c||"")}${p.c?" · ":""}${esc(MUN[p.m]||p.m)} · ${nm.length} asentamiento${nm.length>1?"s":""}</div></div><button class="x" aria-label="Cerrar ficha">×</button></header>
-      <div class="chips"><span class="chip inst" style="background:#7A1430">≈ ${fmt(pob.POBTOT)} habitantes (estimado)</span></div>
+      <div class="chips"><span class="chip inst" style="background:#7A1430">${fmt(pob.POBTOT)} habitantes · Censo 2020</span></div>
       <h4>¿Quién vacuna aquí?</h4>
-      ${Object.keys(pi).length?`<table>${INST.filter(i=>pi[i.id]).map(i=>`<tr><td><span class="sw" style="background:${i.c}"></span> ${i.lab}${cov[i.id]?`<div style="font-size:11.5px;color:var(--muted)">AGEB ${cov[i.id].a.join(", ")}</div>`:""}</td><td>≈ ${fmt(pi[i.id])} hab.</td></tr>`).join("")}</table>`:`<p class="foot">Sin AGEB urbanas en esta zona postal.</p>`}
+      ${Object.keys(pi).length?`<table>${INST.filter(i=>pi[i.id]).map(i=>`<tr><td><span class="sw" style="background:${i.c}"></span> ${i.lab}${cov[i.id]?`<div style="font-size:11.5px;color:var(--muted)">AGEB ${cov[i.id].a.join(", ")}</div>`:""}</td><td>${fmt(pi[i.id])} hab.</td></tr>`).join("")}</table>`:`<p class="foot">Sin AGEB urbanas en esta zona postal.</p>`}
       ${pob.POBTOT?`<h4>Población estimada por edad</h4><table>${PG.map(([f,l])=>`<tr><td>${l}</td><td>≈ ${fmt(pob[f])}</td></tr>`).join("")}</table>`:""}
       <h4>Colonias y fraccionamientos (${nm.length})</h4><ul>${nm.slice(0,25).map(x=>`<li>${esc(x[0])} <span style="color:var(--muted)">(${esc(x[1])})</span></li>`).join("")}${nm.length>25?`<li>y ${nm.length-25} más</li>`:""}</ul>
-      <div class="foot">Estimación: la población del Censo 2020 de cada AGEB se reparte entre sus manzanas habitadas (INEGI, Marco Geoestadístico 2025) y se suma por zona postal. Es aproximada: no existe un conteo oficial por colonia. Revisa en el mapa los límites antes de asignar.</div>`;
+      <div class="foot">Habitantes: suma de las manzanas del Censo 2020 (INEGI) que caen dentro de la zona postal de SEPOMEX. Los grupos de edad se estiman con la proporción de cada AGEB.</div>`;
   }else{
     p=R.find(r=>r.k===k);if(!p)return;c=IM[p.i].c;
     selLayer.addLayer(L.circleMarker([p.y,p.x],{renderer:rS,pane:"selP",radius:rRadius(p)+5,color:"#111",weight:2.5,fill:false,dashArray:"4 3"}));
@@ -522,7 +556,7 @@ function select(t,k,fly){
   }
   const card=$("#card");card.style.setProperty("--c",c);card.innerHTML=html;card.hidden=false;
   card.querySelector(".x").onclick=()=>{card.hidden=true;selLayer.clearLayers()};
-  card.querySelectorAll(".collink").forEach(b=>b.onclick=()=>{if(!S.col){S.col=true;$("#cols").checked=true;cpVis()}select("C",b.dataset.cp,true)});
+  card.querySelectorAll(".collink").forEach(b=>b.onclick=()=>{if(b.dataset.k){setPlev("col");select("K",b.dataset.k,true)}else{setPlev("cp");select("C",b.dataset.cp,true)}});
   const gl=card.querySelector("#goLk");if(gl)gl.onclick=e=>{e.preventDefault();const p2=t==="E"?E.find(s=>s.id===k):D.find(d=>d.id===k);ensureVisible(p2.lk[0],(p2.lk[0]==="U"?A.find(f=>f.properties.k===p2.lk[1]).properties:R.find(r=>r.k===p2.lk[1])).i);render();select(p2.lk[0],p2.lk[1],true)};
   S.sel={t,k};
   if(mq.matches)setSheet("peek");
@@ -539,7 +573,8 @@ $("#q").addEventListener("input",e=>{
   const locs=new Map();
   for(const f of A){const p=f.properties;if(p.k.toLowerCase().startsWith(q)||p.a.toLowerCase()===q||(q.length>=4&&p.a.toLowerCase().startsWith(q)))hits.push({t:"U",k:p.k,lab:"AGEB "+p.a+" · "+p.l,sub:(MUN[p.m]||"")+" · "+IM[p.i].lab+" · "+fmt(p.POBTOT)+" hab.",c:IM[p.i].c});else if(norm(p.l).includes(q)&&!locs.has(p.m+p.l))locs.set(p.m+p.l,{t:"L",k:p.m,l:p.l,lab:p.l,sub:"Localidad urbana · "+(MUN[p.m]||"")+" · ver sus AGEB",c:"#555"})}
   hits.push(...locs.values());
-  for(const f of CP){const p=f.properties;if(p.cp.startsWith(q)&&q.length>=3){hits.push({t:"C",k:p.cp,lab:"CP "+p.cp+" · "+p.a[0][0],sub:"Zona postal · "+(MUN[p.m]||""),c:"#7A1430"});continue}for(const [n,tp] of p.a)if(norm(n).includes(q)){hits.push({t:"C",k:p.cp,lab:n,sub:tp+" · CP "+p.cp+" · "+(p.c||MUN[p.m]||"")+(p.pob&&p.pob.POBTOT?" · ≈ "+fmt(p.pob.POBTOT)+" hab. en el CP":""),c:"#7A1430"});break}}
+  let kh=0;if(q.length>=3)for(const f of K){const p=f.properties;if(norm(p.n).includes(q)){kh++;hits.push({t:"K",k:p.id,lab:p.n,sub:(p.t||"Colonia")+(p.cp?" · CP "+p.cp:"")+" · "+(LOCN[p.loc]||MUN[p.m]||"")+" · "+fmt(p.pob)+" hab.",c:"#7A1430"})}}
+  for(const f of CP){const p=f.properties;if(p.cp.startsWith(q)&&q.length>=3){hits.push({t:"C",k:p.cp,lab:"CP "+p.cp+" · "+p.a[0][0],sub:"Zona postal · "+(MUN[p.m]||"")+(p.pob&&p.pob.POBTOT?" · "+fmt(p.pob.POBTOT)+" hab.":""),c:"#7A1430"});continue}if(!kh)for(const [n,tp] of p.a)if(norm(n).includes(q)){hits.push({t:"C",k:p.cp,lab:n,sub:tp+" · CP "+p.cp+" · "+(p.c||MUN[p.m]||"")+(p.pob&&p.pob.POBTOT?" · ≈ "+fmt(p.pob.POBTOT)+" hab. en el CP":""),c:"#7A1430"});break}}
   if(q.length>=3)for(const s of E){if(s.n&&norm(s.n).includes(q))hits.push({t:"E",k:s.id,lab:s.n,sub:"Escuela "+s.t.toLowerCase()+" · "+s.l+" · "+(MUN[s.m]||""),c:EM[eCat(s.t)].c,pt:1})}
   if(q.length>=3)for(const d of D){if(norm(d.n).includes(q))hits.push({t:"D",k:d.id,lab:d.n,sub:DM[d.c].lab+" · "+d.l+" · "+d.d,c:DM[d.c].c,pt:1})}
   for(const p of R){if(norm(p.n).includes(q)||p.k.startsWith(q))hits.push({t:"R",k:p.k,lab:p.n,sub:"Rural · "+(MUN[p.m]||"")+" · "+IM[p.i].lab+" · "+fmt(p.POBTOTE)+" hab.",c:IM[p.i].c,pt:1})}
@@ -559,7 +594,8 @@ function ensureVisible(t,i){if(!instOK(i)){S.isel.add(i);syncChips()}const set=t
 function pick(h){
   if(!h)return;$("#results").style.display="none";
   if(h.t==="M"){setMun(h.k);return}
-  if(h.t==="C"){const f=CP.find(f=>f.properties.cp===h.k);if(S.mun&&f&&S.mun!==f.properties.m){S.mun="";$("#fMun").value="";fillCol();render()}if(!S.col){S.col=true;$("#cols").checked=true;cpVis()}select("C",h.k,true);return}
+  if(h.t==="K"){const p=KbyId.get(h.k);if(S.mun&&p&&S.mun!==p.m){S.mun="";$("#fMun").value="";fillCol();render()}setPlev("col");select("K",h.k,true);return}
+  if(h.t==="C"){const f=CP.find(f=>f.properties.cp===h.k);if(S.mun&&f&&S.mun!==f.properties.m){S.mun="";$("#fMun").value="";fillCol();render()}setPlev("cp");select("C",h.k,true);return}
   if(h.t==="L"){const fs=A.filter(f=>f.properties.m===h.k&&f.properties.l===h.l);if(S.mun&&S.mun!==h.k)setMun("",true);render();focusTo({b:L.geoJSON({type:"FeatureCollection",features:fs}).getBounds(),z:16});return}
   if(h.t==="E"){const s=E.find(x=>x.id===h.k);if(S.mun&&S.mun!==s.m){S.mun="";$("#fMun").value="";fillCol()}if(!onE.has(eCat(s.t))){onE.add(eCat(s.t));document.querySelector(`.lyr[data-t="E"][data-i="${eCat(s.t)}"] input`).checked=true}render();select("E",h.k,true);return}
   if(h.t==="D"){const d=D.find(x=>x.id===h.k);if(S.mun&&S.mun!==d.m){S.mun="";$("#fMun").value=""}if(!onD.has(d.c)){onD.add(d.c);document.querySelector(`.lyr[data-t="D"][data-i="${d.c}"] input`).checked=true}render();select("D",h.k,true);return}
@@ -572,11 +608,15 @@ function pick(h){
 function fillCol(){
   const s=$("#fCol");s.innerHTML='<option value="">Elige una colonia…</option>';
   const groups={};
-  for(const f of CP){const p=f.properties;if(!inMun(p.m))continue;const g=(p.c||MUN[p.m]||"Otras")+(S.mun?"":" ("+(MUN[p.m]||"")+")");for(const [n,tp] of p.a)(groups[g]=groups[g]||[]).push([n,tp,p.cp])}
+  for(const f of K){const p=f.properties;if(!inMun(p.m))continue;const g=(LOCN[p.loc]||"Otras")+(S.mun?"":" ("+(MUN[p.m]||"")+")");(groups[g]=groups[g]||[]).push(p)}
   Object.keys(groups).sort((a,b)=>a.localeCompare(b,"es")).forEach(g=>{const og=document.createElement("optgroup");og.label=g;
-    groups[g].sort((a,b)=>a[0].localeCompare(b[0],"es")).forEach(([n,tp,cp])=>og.appendChild(new Option(n+" · CP "+cp,cp+"|"+n)));s.appendChild(og)});
+    groups[g].sort((a,b)=>a.n.localeCompare(b.n,"es")).forEach(p=>og.appendChild(new Option(p.n+" · "+fmt(p.pob)+" hab.",p.id)));s.appendChild(og)});
 }
-$("#fCol").onchange=e=>{const v=e.target.value;if(!v)return;const cp=v.split("|")[0];if(!S.col){S.col=true;$("#cols").checked=true;cpVis()}select("C",cp,true)};
+$("#fCol").onchange=e=>{const v=e.target.value;if(!v)return;setPlev("col");select("K",v,true)};
+const PLH={col:"Contorno y habitantes de cada colonia (suma de manzanas del Censo 2020). Contornos desde zoom 13.5, nombres desde zoom 14.",ageb:"Clave y habitantes de cada AGEB (Censo 2020) desde zoom 13.5.",cp:"Zonas de código postal (SEPOMEX) con sus habitantes, desde zoom 12."};
+function setPlev(v){S.plev=v;document.querySelectorAll(".seg button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.v===v));$("#plevHint").textContent=PLH[v];cpVis();kVis();labels()}
+document.querySelectorAll(".seg button").forEach(b=>b.onclick=()=>{setPlev(b.dataset.v);const z=map.getZoom(),need=b.dataset.v==="cp"?12:14;if(z<need)toast("Acércate al mapa (zoom "+need+") para ver la población por "+(b.dataset.v==="cp"?"código postal":b.dataset.v==="ageb"?"AGEB":"colonia")+".",3500)});
+$("#plevHint").textContent=PLH.col;
 function setMun(k,silent){
   S.mun=k;$("#fMun").value=k;fillCol();
   if(!silent){render();
@@ -589,7 +629,6 @@ $("#lbls").onchange=e=>{S.labels=e.target.checked;labels()};
 $("#reas").onchange=e=>{S.reas=e.target.checked;render();if(S.reas){const n=R.filter(p=>p.i0==="SIN COBERTURA"&&inMun(p.m)).length;toast(fmt(n)+" localidades rurales pasaron de sin cobertura a una institución en Reunión 5.")}};
 $("#pobl").onchange=e=>{S.pobl=e.target.checked;labels()};
 $("#calles").onchange=e=>{S.calles=e.target.checked;loadStreets();labels()};
-$("#cols").onchange=e=>{S.col=e.target.checked;cpVis();labels()};
 $("#munl").onchange=e=>{S.munl=e.target.checked;munLayer.setStyle(munStyle());labels()};
 const BASES={
   voyager:["https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png","© OpenStreetMap · © CARTO"],
@@ -631,6 +670,7 @@ function notes(){
   <p><b>Cobertura del mapa:</b> ${fmt(A.length)} de ${fmt(A.length+um.length)} AGEB urbanas y ${fmt(R.length)} de ${fmt(R.length)} localidades rurales. Sin polígono: ${um.map(u=>"AGEB "+esc(u.a)+" de "+esc(u.l)+" ("+fmt(u.POBTOT)+" hab., "+esc(u.i)+")").join("; ")}.</p>
   <p><b>Colonias:</b> ${fmt(CP.length)} zonas de código postal urbanas con ${fmt(CP.reduce((s,f)=>s+f.properties.a.length,0))} colonias y fraccionamientos (polígonos y catálogo de SEPOMEX/Correos de México, copias públicas en GitHub; fecha de corte no confirmada). Un código postal puede agrupar varias colonias, por eso se rotulan por zona postal.</p>
   <p><b>Salud y asistencia:</b> ${fmt(D.length)} establecimientos del DENUE (INEGI, sector 62) en Durango, ligados a su AGEB. El DENUE casi no registra unidades rurales; para el inventario oficial de unidades de salud la fuente es CLUES.</p>
+  <p><b>Población por colonia:</b> ${fmt(K.length)} colonias armadas con las manzanas del Censo 2020 (población) y la colonia que el DENUE (INEGI, 2025) registra en cada manzana; las manzanas sin negocios toman la colonia de la manzana vecina más cercana. Los contornos son aproximados.</p>
   <p><b>Calles, escuelas y unidades médicas:</b> INEGI, Marco Geoestadístico 2025 de Durango (ejes de vialidad con nombre en ${fmt(Object.keys(CI).length)} localidades; ${fmt(E.length)} escuelas; ${fmt(D.filter(d=>d.src==="MG").length)} centros de salud y hospitales). Las escuelas no traen clave CCT ni si son públicas o privadas.</p>
   <p>Las 61 localidades urbanas se asignan por AGEB, por eso no aparecen como punto en la capa rural.</p>`;
 }
