@@ -45,6 +45,8 @@ input[type=search]:focus,select:focus{background:#fff}
 #results button{display:flex;width:100%;text-align:left;gap:8px;align-items:center;border:0;background:none;padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--soft)}
 #results button:hover,#results button.on{background:var(--soft)}
 #results small{color:var(--muted);display:block;font-size:11.5px}
+#results .rhead{position:sticky;top:0;background:#7A1430;color:#fff;font:600 12px/1.2 var(--body);padding:7px 10px;z-index:1}
+#results button.hdr{background:#fbf4f6;font-weight:600}
 .sw{width:11px;height:11px;border-radius:3px;flex:none;display:inline-block}
 .sw.pt{border-radius:50%}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
@@ -542,7 +544,8 @@ function select(t,k,fly){
       <h4>¿Quién vacuna aquí?</h4>
       ${Object.keys(pi).length?`<table>${INST.filter(i=>pi[i.id]).map(i=>`<tr><td><span class="sw" style="background:${i.c}"></span> ${i.lab}${cov[i.id]?`<div style="font-size:11.5px;color:var(--muted)">AGEB ${cov[i.id].a.join(", ")}</div>`:""}</td><td>${fmt(pi[i.id])} hab.</td></tr>`).join("")}</table>`:`<p class="foot">Sin AGEB urbanas en esta zona postal.</p>`}
       ${pob.POBTOT?`<h4>Población estimada por edad</h4><table>${PG.map(([f,l])=>`<tr><td>${l}</td><td>≈ ${fmt(pob[f])}</td></tr>`).join("")}</table>`:""}
-      <h4>Colonias y fraccionamientos (${nm.length})</h4><ul>${nm.slice(0,25).map(x=>`<li>${esc(x[0])} <span style="color:var(--muted)">(${esc(x[1])})</span></li>`).join("")}${nm.length>25?`<li>y ${nm.length-25} más</li>`:""}</ul>
+      ${(()=>{const ks=kInCP(p.cp),have=new Set(ks.map(x=>norm(x.n))),rest=nm.filter(x=>!have.has(norm(x[0])));
+        return `<h4>Colonias de este código postal (${ks.length+rest.length})</h4><table>${ks.map(x=>`<tr><td><button class="collink" data-k="${x.id}">${esc(x.n)}</button></td><td>${fmt(x.pob)} hab.</td></tr>`).join("")}${rest.map(x=>`<tr><td>${esc(x[0])} <span style="color:var(--muted);font-weight:400">(${esc(x[1])})</span></td><td style="color:var(--muted);font-weight:400">sin dato</td></tr>`).join("")}</table>`})()}
       <div class="foot">Habitantes: suma de las manzanas del Censo 2020 (INEGI) que caen dentro de la zona postal de SEPOMEX. Los grupos de edad se estiman con la proporción de cada AGEB.</div>`;
   }else{
     p=R.find(r=>r.k===k);if(!p)return;c=IM[p.i].c;
@@ -569,6 +572,14 @@ let hits=[],hi=-1;
 $("#q").addEventListener("input",e=>{
   const q=norm(e.target.value.trim()),box=$("#results");hits=[];hi=-1;
   if(q.length<2){box.style.display="none";return}
+  if(/^\d{5}$/.test(q)){
+    const f=CP.find(x=>x.properties.cp===q),ks=kInCP(q),p=f?f.properties:null;
+    if(f||ks.length){
+      hits.push({t:"C",k:q,hdr:1,lab:"CP "+q+" · ver toda la zona postal",sub:ks.length+" colonias con población"+(p&&p.pob&&p.pob.POBTOT?" · "+fmt(p.pob.POBTOT)+" hab.":"")+(p?" · "+(p.c||MUN[p.m]||""):""),c:"#7A1430"});
+      ks.forEach(k=>hits.push({t:"K",k:k.id,lab:k.n,sub:(k.t||"Colonia")+" · "+fmt(k.pob)+" hab.",c:"#7A1430"}));
+      if(p){const have=new Set(ks.map(k=>norm(k.n)));for(const [n,tp] of p.a)if(!have.has(norm(n)))hits.push({t:"C",k:q,lab:n,sub:tp+" · sin manzanas habitadas en el Censo 2020 (se muestra la zona postal)",c:"#c9b3ba"})}
+      showHits(box,`Colonias del código postal ${q} · elige una`);return}
+  }
   for(const [k,v] of Object.entries(MUN))if(norm(v).includes(q))hits.push({t:"M",k,lab:v,sub:"Municipio · filtra el mapa",c:"#8d948a"});
   const locs=new Map();
   for(const f of A){const p=f.properties;if(p.k.toLowerCase().startsWith(q)||p.a.toLowerCase()===q||(q.length>=4&&p.a.toLowerCase().startsWith(q)))hits.push({t:"U",k:p.k,lab:"AGEB "+p.a+" · "+p.l,sub:(MUN[p.m]||"")+" · "+IM[p.i].lab+" · "+fmt(p.POBTOT)+" hab.",c:IM[p.i].c});else if(norm(p.l).includes(q)&&!locs.has(p.m+p.l))locs.set(p.m+p.l,{t:"L",k:p.m,l:p.l,lab:p.l,sub:"Localidad urbana · "+(MUN[p.m]||"")+" · ver sus AGEB",c:"#555"})}
@@ -578,11 +589,12 @@ $("#q").addEventListener("input",e=>{
   if(q.length>=3)for(const s of E){if(s.n&&norm(s.n).includes(q))hits.push({t:"E",k:s.id,lab:s.n,sub:"Escuela "+s.t.toLowerCase()+" · "+s.l+" · "+(MUN[s.m]||""),c:EM[eCat(s.t)].c,pt:1})}
   if(q.length>=3)for(const d of D){if(norm(d.n).includes(q))hits.push({t:"D",k:d.id,lab:d.n,sub:DM[d.c].lab+" · "+d.l+" · "+d.d,c:DM[d.c].c,pt:1})}
   for(const p of R){if(norm(p.n).includes(q)||p.k.startsWith(q))hits.push({t:"R",k:p.k,lab:p.n,sub:"Rural · "+(MUN[p.m]||"")+" · "+IM[p.i].lab+" · "+fmt(p.POBTOTE)+" hab.",c:IM[p.i].c,pt:1})}
-  hits=hits.slice(0,40);
-  box.innerHTML=hits.length?hits.map((h,j)=>`<button data-j="${j}" role="option"><span class="sw ${h.pt?"pt":""}" style="background:${h.c}"></span><span>${esc(h.lab)}<small>${esc(h.sub)}</small></span></button>`).join(""):`<div style="padding:10px;color:var(--muted)">Sin coincidencias</div>`;
+  hits=hits.slice(0,40);showHits(box)});
+function showHits(box,title){
+  box.innerHTML=(title&&hits.length?`<div class="rhead">${esc(title)}</div>`:"")+(hits.length?hits.map((h,j)=>`<button data-j="${j}" role="option" class="${h.hdr?"hdr":""}"><span class="sw ${h.pt?"pt":""}" style="background:${h.c}"></span><span>${esc(h.lab)}<small>${esc(h.sub)}</small></span></button>`).join(""):`<div style="padding:10px;color:var(--muted)">Sin coincidencias</div>`);
   box.style.display="block";
   box.querySelectorAll("button").forEach(b=>b.onclick=()=>pick(hits[+b.dataset.j]));
-});
+}
 $("#q").addEventListener("keydown",e=>{
   const bs=[...$("#results").querySelectorAll("button")];if(!bs.length)return;
   if(e.key==="ArrowDown"||e.key==="ArrowUp"){e.preventDefault();hi=(hi+(e.key==="ArrowDown"?1:-1)+bs.length)%bs.length;bs.forEach((b,j)=>b.classList.toggle("on",j===hi));bs[hi].scrollIntoView({block:"nearest"})}
@@ -605,6 +617,11 @@ function pick(h){
 }
 
 /* ---------- filtros y opciones ---------- */
+function kInCP(cp){
+  const f=CP.find(x=>x.properties.cp===cp),names=new Set(f?f.properties.a.map(x=>norm(x[0])):[]),m=f?f.properties.m:null,out=new Map();
+  for(const g of K){const p=g.properties;if(p.cp===cp||(m&&p.m===m&&names.has(norm(p.n))))out.set(p.id,p)}
+  return [...out.values()].sort((a,b)=>a.n.localeCompare(b.n,"es"));
+}
 function fillCol(){
   const s=$("#fCol");s.innerHTML='<option value="">Elige una colonia…</option>';
   const groups={};
