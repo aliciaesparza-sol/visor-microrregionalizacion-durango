@@ -196,9 +196,7 @@ input[type=range]{width:100%;accent-color:var(--guinda)}
           <div class="field"><label for="base">Mapa base</label>
             <select id="base">
               <option value="none">Vectorial (sin conexión externa)</option>
-              <option value="voyager">Calles con nombres (CARTO Voyager)</option>
-              <option value="carto">Calles claro (CARTO)</option>
-              <option value="osm">OpenStreetMap</option>
+              <option value="osm">Calles (OpenStreetMap)</option>
               <option value="topo">Topográfico (Esri)</option>
               <option value="sat">Satélite (Esri)</option>
             </select>
@@ -290,7 +288,7 @@ function init(){
     munLbl.addLayer(L.tooltip({permanent:true,direction:"center",className:"lbl mun",pane:"lblP",interactive:false}).setLatLng(c).setContent(esc(f.properties.nom)));
   }
   map.fitBounds(munLayer.getBounds(),{padding:[10,10]});
-  buildLayersUI();notes();setBase("voyager",true);render(true);
+  buildLayersUI();notes();setBase("osm",true);render(true);
   $("#loading").hidden=true;
   map.on("zoomend",()=>{cpVis();dVis();eVis()});
   map.on("moveend",loadStreets);
